@@ -49,7 +49,7 @@ docker build -t uts-aggregator .
 docker run -p 8080:8080 -v aggregator_data:/app/data uts-aggregator
 ```
 
-### Menggunakan Docker Compose (Bonus — menjalankan aggregator + publisher sekaligus)
+### Menggunakan Docker Compose 
 
 ```bash
 # Jalankan semua service
@@ -60,13 +60,6 @@ docker-compose logs -f
 
 # Hentikan
 docker-compose down
-```
-
-### Menjalankan Lokal (Development)
-
-```bash
-pip install -r requirements.txt
-DEDUP_DB_PATH=./data/dedup.db python -m uvicorn src.main:app --reload --port 8080
 ```
 
 ---
@@ -127,12 +120,15 @@ python -m src.publisher --host http://localhost:8080 --total 5000 --dup-rate 0.2
 ## Menjalankan Unit Tests
 
 ```bash
+# Aktivasi env
+source venv/bin/activate
+
 # Dari direktori project
 pip install -r requirements.txt
-pytest tests/ -v
+python -m pytest tests/ -v
 
-# Atau dalam container
-docker run --rm uts-aggregator pytest tests/ -v
+# Deaktivasi env
+deactivate
 ```
 
 ---
@@ -151,9 +147,9 @@ uts-aggregator/
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py
-│   └── test_aggregator.py  # 10 unit tests
+│   └── test_aggregator.py 
 ├── Dockerfile
-├── docker-compose.yml   # Bonus: dua service terpisah
+├── docker-compose.yml  
 ├── requirements.txt
 ├── pytest.ini
 └── README.md
