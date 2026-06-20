@@ -1,13 +1,3 @@
-"""
-conftest.py — Shared pytest fixtures untuk Pub-Sub Log Aggregator tests.
-
-Menggunakan SQLite (via aiosqlite) sebagai pengganti PostgreSQL untuk unit tests,
-dan in-memory queue sebagai pengganti Redis broker.
-
-Ini memungkinkan tests berjalan tanpa infrastruktur eksternal,
-namun tetap menguji logika bisnis yang sama.
-"""
-
 from __future__ import annotations
 
 import asyncio

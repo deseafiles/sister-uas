@@ -1,15 +1,3 @@
-"""
-broker.py — Redis Pub/Sub Broker.
-
-Redis digunakan sebagai message broker antara publisher dan consumer.
-Publisher → LPUSH ke Redis list (event queue)
-Consumer  → BRPOP dari Redis list (blocking pop, at-least-once semantics)
-
-Penggunaan Redis list (bukan Redis Pub/Sub channel) karena:
-- List mendukung persistence (jika Redis dikonfigurasi dengan AOF/RDB)
-- BRPOP blocking pop meminimalkan CPU spinning
-- Cocok untuk at-least-once delivery dengan consumer group sederhana
-"""
 
 from __future__ import annotations
 

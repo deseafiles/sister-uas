@@ -1,16 +1,3 @@
-"""
-main.py — FastAPI Application untuk Pub-Sub Log Aggregator.
-
-Endpoint:
-  POST /publish  — Publish batch/single event ke Redis broker
-  GET  /events   — Daftar event unik yang sudah diproses (dari PostgreSQL)
-  GET  /stats    — Statistik sistem lengkap
-  GET  /health   — Health check (Postgres + Redis connectivity)
-
-Arsitektur:
-  Publisher → POST /publish → Redis Queue → Consumer Workers → PostgreSQL
-"""
-
 from __future__ import annotations
 
 import asyncio

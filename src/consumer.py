@@ -1,20 +1,3 @@
-"""
-consumer.py — Multi-Worker Idempotent Async Consumer.
-
-Mendukung multiple worker coroutine yang berkompetisi mengonsumsi event
-dari Redis broker dan memproses ke PostgreSQL dengan idempotency guarantee.
-
-Race condition prevention:
-    Dua worker yang memproses event_id yang sama secara concurrent
-    → keduanya mencoba INSERT ... ON CONFLICT DO NOTHING ke PostgreSQL
-    → hanya satu INSERT berhasil (unique constraint enforcement)
-    → worker kedua mendapat ON CONFLICT (bukan error), return False
-    → exactly-once processing terjamin
-
-Ini adalah contoh konkret dari "idempotent receiver" pattern dari
-Tanenbaum & Van Steen, Distributed Systems, Bab 8 (Consistency & Replication).
-"""
-
 from __future__ import annotations
 
 import asyncio

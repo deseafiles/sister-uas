@@ -1,31 +1,3 @@
-"""
-dedup_store.py — PostgreSQL-based Idempotent Deduplication Store.
-
-=== ISOLATION LEVEL: READ COMMITTED ===
-
-Kami memilih READ COMMITTED (default PostgreSQL) dengan alasan:
-
-1. ATOMICITY via unique constraint + INSERT ... ON CONFLICT DO NOTHING:
-   Bahkan pada READ COMMITTED, operasi INSERT tunggal bersifat atomik di
-   PostgreSQL. Jika dua worker concurrently mencoba INSERT event yang sama,
-   hanya satu yang berhasil — yang lain mendapat ON CONFLICT (bukan error).
-   Ini cukup untuk menjamin exactly-once processing.
-
-2. Tidak butuh SERIALIZABLE:
-   SERIALIZABLE mencegah phantom reads dan write skew, namun overhead-nya
-   signifikan (SSI bookkeeping, potential serialization failures + retry).
-   Untuk deduplication sederhana berbasis PK unik, READ COMMITTED sudah aman
-   karena constraint enforcement terjadi di storage layer, bukan di MVCC.
-
-3. Trade-off:
-   - READ COMMITTED: throughput tinggi, latensi rendah, occasional re-read
-     (nilai yang dibaca bisa berubah dalam transaksi panjang).
-   - REPEATABLE READ: aman dari non-repeatable reads, overhead moderat.
-   - SERIALIZABLE: aman penuh, overhead tinggi, cocok untuk financial txns.
-
-Untuk log aggregator dengan volume tinggi, READ COMMITTED adalah pilihan tepat.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -90,13 +62,13 @@ class DedupStore:
         async with self._pool.acquire() as conn:
             await conn.execute("""
                 CREATE TABLE IF NOT EXISTS processed_events (
-                    id            BIGSERIAL PRIMARY KEY,
-                    topic         TEXT        NOT NULL,
-                    event_id      TEXT        NOT NULL,
-                    source        TEXT        NOT NULL,
-                    payload       JSONB       NOT NULL DEFAULT '{}',
-                    timestamp     TIMESTAMPTZ NOT NULL,
-                    processed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    id           BIGSERIAL PRIMARY KEY,
+                    topic        TEXT        NOT NULL,
+                    event_id     TEXT        NOT NULL,
+                    source       TEXT        NOT NULL,
+                    payload      JSONB       NOT NULL DEFAULT '{}',
+                    timestamp    TIMESTAMPTZ NOT NULL,
+                    processed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     CONSTRAINT uq_topic_event_id UNIQUE (topic, event_id)
                 );
 
@@ -145,6 +117,11 @@ class DedupStore:
         async with self._pool.acquire() as conn:
             # Eksplisit set isolation level READ COMMITTED
             async with conn.transaction(isolation="read_committed"):
+                if isinstance(timestamp, str):
+                    timestamp = datetime.fromisoformat(
+                        timestamp.replace("Z", "+00:00")
+                    )
+
                 result = await conn.fetchval(
                     """
                     WITH ins AS (
@@ -221,26 +198,41 @@ class DedupStore:
             SELECT topic, event_id, source, payload, timestamp, processed_at
             FROM processed_events
         """
+
         params: tuple = ()
+
         if topic:
             query += " WHERE topic = $1"
             params = (topic,)
+
         query += " ORDER BY processed_at DESC LIMIT 500"
 
         async with self._pool.acquire() as conn:
             rows = await conn.fetch(query, *params)
 
-        return [
-            {
-                "topic": r["topic"],
-                "event_id": r["event_id"],
-                "source": r["source"],
-                "payload": dict(r["payload"]) if r["payload"] else {},
-                "timestamp": r["timestamp"].isoformat() if r["timestamp"] else "",
-                "processed_at": r["processed_at"].isoformat() if r["processed_at"] else "",
-            }
-            for r in rows
-        ]
+        result = []
+
+        for r in rows:
+            payload = r["payload"]
+
+            if isinstance(payload, str):
+                try:
+                    payload = json.loads(payload)
+                except Exception:
+                    payload = {}
+
+            result.append(
+                {
+                    "topic": r["topic"],
+                    "event_id": r["event_id"],
+                    "source": r["source"],
+                    "payload": payload,
+                    "timestamp": r["timestamp"].isoformat() if r["timestamp"] else "",
+                    "processed_at": r["processed_at"].isoformat() if r["processed_at"] else "",
+                }
+            )
+
+        return result
 
     async def get_topics(self) -> list[str]:
         async with self._pool.acquire() as conn:
@@ -288,6 +280,13 @@ class DedupStore:
         async with self._pool.acquire() as conn:
             async with conn.transaction(isolation="read_committed"):
                 for ev in events:
+                    # PERBAIKAN: mengambil timestamp langsung dari dictionary 'ev'
+                    timestamp = ev.get("timestamp", datetime.now(UTC).isoformat())
+                    if isinstance(timestamp, str):
+                        timestamp = datetime.fromisoformat(
+                            timestamp.replace("Z", "+00:00")
+                        ) 
+                    
                     result = await conn.fetchval(
                         """
                         WITH ins AS (
@@ -303,7 +302,7 @@ class DedupStore:
                         ev["event_id"],
                         ev["source"],
                         json.dumps(ev.get("payload", {})),
-                        ev.get("timestamp", datetime.now(UTC).isoformat()),
+                        timestamp,
                     )
                     if result == 1:
                         inserted += 1

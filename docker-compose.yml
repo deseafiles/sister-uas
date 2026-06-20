@@ -1,48 +1,74 @@
 version: "3.9"
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: aggregator-postgres
+    environment:
+      POSTGRES_USER: aggregator
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: aggregator_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - aggnet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aggregator -d aggregator_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: aggregator-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - aggnet
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   aggregator:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: log-aggregator
+    environment:
+      POSTGRES_DSN: postgresql://aggregator:secret@postgres:5432/aggregator_db
+      REDIS_URL: redis://redis:6379/0
+      WORKER_COUNT: 3
+      PYTHONUNBUFFERED: 1
     ports:
       - "8080:8080"
-    volumes:
-      - dedup_data:/app/data
-    environment:
-      - DEDUP_DB_PATH=/app/data/dedup.db
-      - PYTHONUNBUFFERED=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - aggnet
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8080/health', timeout=3.0)"]
       interval: 5s
       timeout: 3s
       retries: 5
     restart: unless-stopped
-  publisher:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: log-publisher
-    depends_on:
-      aggregator:
-        condition: service_healthy
-    command: >
-      python -m src.publisher
-        --host http://aggregator:8080
-        --total 5000
-        --dup-rate 0.2
-    environment:
-      - PYTHONUNBUFFERED=1
-    networks:
-      - aggnet
-    restart: "no" 
+
 volumes:
-  dedup_data:
+  postgres_data:
     driver: local
+  redis_data:
+    driver: local
+
 networks:
   aggnet:
     driver: bridge
-    internal: true

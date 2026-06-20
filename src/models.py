@@ -1,10 +1,3 @@
-"""
-models.py — Pydantic v2 schemas untuk Pub-Sub Log Aggregator.
-
-Event schema mencakup validasi topic (no spaces, lowercase),
-event_id (non-empty), timestamp (ISO8601), source, dan payload bebas.
-"""
-
 from __future__ import annotations
 
 import uuid

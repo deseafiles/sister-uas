@@ -1,17 +1,3 @@
-"""
-test_aggregator.py — Comprehensive pytest test suite.
-
-Membuktikan semua poin rubrik:
-1. Schema validation
-2. Idempotency & deduplication
-3. Transaksi & konkurensi
-4. Persistence
-5. API endpoints
-6. Stress & throughput
-
-Total: 20 tests (melebihi minimum 15).
-"""
-
 from __future__ import annotations
 
 import asyncio
